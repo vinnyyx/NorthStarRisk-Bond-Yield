@@ -24,10 +24,12 @@ namespace BondYieldEstimator
         public double YieldEstimate;
         public double YieldSecondOrder;
         public double YieldCustom;
+        public double CouponYield;                 // New: coupon yield estimate
         public double ErrorFirstOrder;
         public double ErrorEstimate;
         public double ErrorSecondOrder;
         public double ErrorCustom;
+        public double ErrorCouponYield;            // New: error for coupon yield
 
         public Bond(double notional, double couponRate, double yield, PaymentFrequency freq,
                     DateTime evaluationDate, DateTime maturityDate)
@@ -53,6 +55,10 @@ namespace BondYieldEstimator
             ErrorSecondOrder = YieldSecondOrder - Yield;
             YieldCustom = BondUtils.CustomYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price);
             ErrorCustom = YieldCustom - Yield;
+
+            // Compute coupon yield and its error
+            CouponYield = BondUtils.CouponSpreadYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price);
+            ErrorCouponYield = CouponYield - Yield;
         }
     }
 
@@ -60,10 +66,11 @@ namespace BondYieldEstimator
     {
         public static double CalendarDaysPerYear = 365.25;
 
-        public static IEnumerable<Bond> GenerateUniqueBonds(DateTime evaluationDate, double notional, double[] couponRates, double[] yields, PaymentFrequency[] frequencies, int maxYears)
+        public static IEnumerable<Bond> GenerateUniqueBonds(DateTime evaluationDate, double notional, double[] couponRates,
+                                                              double[] yields, PaymentFrequency[] frequencies, int maxYears)
         {
-            HashSet<(double, double, PaymentFrequency, DateTime)> seen = new();
-            List<Bond> uniqueBonds = new();
+            var seen = new HashSet<(double, double, PaymentFrequency, DateTime)>();
+            var uniqueBonds = new List<Bond>();
 
             for (int d = 1; d <= maxYears * 365; d++)
             {
@@ -76,10 +83,7 @@ namespace BondYieldEstimator
                 {
                     var key = (cr, yld, freq, maturity);
                     if (seen.Add(key))
-                    {
-                        Bond bond = new Bond(notional, cr, yld, freq, evaluationDate, maturity);
-                        uniqueBonds.Add(bond);
-                    }
+                        uniqueBonds.Add(new Bond(notional, cr, yld, freq, evaluationDate, maturity));
                 }
             }
 
@@ -88,41 +92,36 @@ namespace BondYieldEstimator
 
         public static DateTime[] GeneratePaymentDates(PaymentFrequency frequency, DateTime evaluationDate, DateTime maturityDate)
         {
-            int monthsBetweenPayments = 12 / (int)frequency;
-            List<DateTime> paymentDates = new();
+            int monthsBetween = 12 / (int)frequency;
+            var dates = new List<DateTime>();
             DateTime date = maturityDate;
 
             while (date > evaluationDate)
             {
-                paymentDates.Add(date.ToBusinessDay());
-                date = date.AddMonths(-monthsBetweenPayments);
+                dates.Add(date.ToBusinessDay());
+                date = date.AddMonths(-monthsBetween);
             }
 
-            paymentDates.Sort();
-            return paymentDates.ToArray();
+            dates.Sort();
+            return dates.ToArray();
         }
 
-        public static double[] GenerateCashFlows(double notional, double couponRate, PaymentFrequency frequency, DateTime evaluationDate, DateTime maturityDate)
+        public static double[] GenerateCashFlows(double notional, double couponRate, PaymentFrequency frequency,
+                                                 DateTime evaluationDate, DateTime maturityDate)
         {
-            var paymentDates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
-            int n = paymentDates.Length;
+            var dates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
+            int n = dates.Length;
+            if (n == 0) return Array.Empty<double>();
 
-            if (n == 0)
-            {
-                // Log or skip empty cash flows
-                return Array.Empty<double>();
-            }
-
-            double[] cashFlows = new double[n];
-
+            var flows = new double[n];
             for (int i = 0; i < n; i++)
-                cashFlows[i] = notional * couponRate / (int)frequency;
-
-            cashFlows[n - 1] += notional;
-            return cashFlows;
+                flows[i] = notional * couponRate / (int)frequency;
+            flows[n - 1] += notional;
+            return flows;
         }
 
-        public static double PresentValue(double[] cashFlows, DateTime evaluationDate, DateTime[] paymentDates, double yield)
+        public static double PresentValue(double[] cashFlows, DateTime evaluationDate,
+                                          DateTime[] paymentDates, double yield)
         {
             double pv = 0;
             for (int i = 0; i < paymentDates.Length; i++)
@@ -134,153 +133,132 @@ namespace BondYieldEstimator
             return pv;
         }
 
-        public static double InitialYieldEstimateFirstOrder(double notional, double principal, double couponRate, DateTime evaluationDate, DateTime maturityDate, double price)
+        public static double InitialYieldEstimateFirstOrder(double notional, double principal, double couponRate,
+                                                            DateTime evaluationDate, DateTime maturityDate, double price)
         {
             double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
             if (T <= 0 || price <= 0) return 0;
-
             double c = couponRate * notional;
-            double numerator = principal + T * c - price;
-            double denominator = 0.5 * T * (T + 1) * c + T * principal;
-
-            if (denominator == 0 || double.IsNaN(numerator) || double.IsInfinity(numerator) || double.IsNaN(denominator) || double.IsInfinity(denominator))
-                return 0;
-
-            double initialYieldEstimate = numerator / denominator;
-            return Math.Max(0, initialYieldEstimate);
+            double num = principal + T * c - price;
+            double den = 0.5 * T * (T + 1) * c + T * principal;
+            if (den == 0) return 0;
+            return Math.Max(0, num / den);
         }
 
-        public static double InitialYieldEstimate(double notional, double principal, double couponRate, DateTime evaluationDate, DateTime maturityDate, double price)
+        public static double InitialYieldEstimate(double notional, double principal, double couponRate,
+                                                  DateTime evaluationDate, DateTime maturityDate, double price)
         {
             double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
             double c = couponRate * notional;
-            double initialYieldEstimate = (principal + T * c - price) / (price + (T - 1) * (principal + 0.5 * T * c));
-            return Math.Max(0, initialYieldEstimate);
+            double est = (principal + T * c - price) / (price + (T - 1) * (principal + 0.5 * T * c));
+            return Math.Max(0, est);
         }
 
-        public static double InitialYieldEstimateSecondOrder(double notional, double principal, double couponRate, DateTime evaluationDate, DateTime maturityDate, double price)
+        public static double InitialYieldEstimateSecondOrder(double notional, double principal,
+                                                             double couponRate, DateTime evaluationDate,
+                                                             DateTime maturityDate, double price)
         {
             double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
             double c = couponRate * notional;
             double F = principal;
             double P0 = T * c + F;
 
-            double A = 0;
-            for (int t = 1; t <= (int)Math.Round(T); t++) A += t * c;
-            A += T * F;
+            double A = Enumerable.Range(1, (int)Math.Round(T)).Sum(t => t * c) + T * F;
+            double B = Enumerable.Range(1, (int)Math.Round(T)).Sum(t => t * (t + 1) * c) + T * (T + 1) * F;
 
-            double B = 0;
-            for (int t = 1; t <= (int)Math.Round(T); t++) B += t * (t + 1) * c;
-            B += T * (T + 1) * F;
+            if (B == 0) return InitialYieldEstimateFirstOrder(notional, principal, couponRate,
+                                                             evaluationDate, maturityDate, price);
 
-            if (B == 0 || double.IsNaN(B) || double.IsInfinity(B))
-            {
-                return InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, maturityDate, price);
-            }
+            double disc = A * A - 2 * B * (P0 - price);
+            if (disc < 0 && disc > -1e-10) disc = 0;
+            if (disc < 0) return InitialYieldEstimateFirstOrder(notional, principal, couponRate,
+                                                               evaluationDate, maturityDate, price);
 
-            double discriminant = A * A - 2 * B * (P0 - price);
-
-            if (double.IsNaN(discriminant) || double.IsInfinity(discriminant))
-            {
-                return InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, maturityDate, price);
-            }
-
-            if (discriminant < 0)
-            {
-                if (discriminant > -1e-10)
-                    discriminant = 0;
-                else
-                    return InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, maturityDate, price);
-            }
-
-            double sqrtDisc = Math.Sqrt(discriminant);
-            double root1 = (A + sqrtDisc) / B;
-            double root2 = (A - sqrtDisc) / B;
-
-            double yFirstOrder = InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, maturityDate, price);
-            double y = (Math.Abs(root1 - yFirstOrder) < Math.Abs(root2 - yFirstOrder)) ? root1 : root2;
-
-            if (double.IsNaN(y) || double.IsInfinity(y))
-            {
-                return InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, maturityDate, price);
-            }
-
-            return Math.Max(0, y);
+            double sqrtDisc = Math.Sqrt(disc);
+            double r1 = (A + sqrtDisc) / B;
+            double r2 = (A - sqrtDisc) / B;
+            double y1 = InitialYieldEstimateFirstOrder(notional, principal, couponRate,
+                                                       evaluationDate, maturityDate, price);
+            double y = Math.Abs(r1 - y1) < Math.Abs(r2 - y1) ? r1 : r2;
+            return double.IsNaN(y) || double.IsInfinity(y)
+                ? y1
+                : Math.Max(0, y);
         }
 
-        public static double CustomYieldEstimate(double notional, double couponRate, PaymentFrequency frequency, DateTime evaluationDate, DateTime maturityDate, double price)
+        public static double CustomYieldEstimate(double notional, double couponRate, PaymentFrequency frequency,
+                                                 DateTime evaluationDate, DateTime maturityDate, double price)
         {
-            var paymentDates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
-            var cashFlows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
-
+            var dates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
+            var flows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
             double[] yields = { 0.01, 0.04, 0.07 };
-            double[] prices = yields.Select(y => PresentValue(cashFlows, evaluationDate, paymentDates, y)).ToArray();
+            double[] prs   = yields
+                             .Select(y => PresentValue(flows, evaluationDate, dates, y))
+                             .ToArray();
 
             for (int i = 0; i < yields.Length; i++)
-            {
-                if (Math.Abs(price - prices[i]) < 1e-8)
-                    return yields[i];
-            }
+                if (Math.Abs(price - prs[i]) < 1e-8) return yields[i];
 
-            double LinearEstimate(double x0, double x1, double y0, double y1, double px)
-            {
-                if (Math.Abs(x1 - x0) < 1e-8) return y0;
-                return y0 + (px - x0) * (y1 - y0) / (x1 - x0);
-            }
+            double Lin(double x0, double x1, double y0, double y1, double px)
+                => Math.Abs(x1 - x0) < 1e-8 ? y0 : y0 + (px - x0) * (y1 - y0) / (x1 - x0);
 
-            for (int i = 0; i < yields.Length - 1; i++)
-            {
-                if ((price >= prices[i] && price <= prices[i + 1]) || (price <= prices[i] && price >= prices[i + 1]))
-                {
-                    return LinearEstimate(prices[i], prices[i + 1], yields[i], yields[i + 1], price);
-                }
-            }
+            for (int i = 0; i < prs.Length - 1; i++)
+                if ((price >= prs[i] && price <= prs[i + 1]) || (price <= prs[i] && price >= prs[i + 1]))
+                    return Lin(prs[i], prs[i + 1], yields[i], yields[i + 1], price);
 
-            if (price < prices[0])
-                return LinearEstimate(prices[0], prices[1], yields[0], yields[1], price);
-            else
-                return LinearEstimate(prices[1], prices[2], yields[1], yields[2], price);
+            return price < prs[0]
+                ? Lin(prs[0], prs[1], yields[0], yields[1], price)
+                : Lin(prs[1], prs[2], yields[1], yields[2], price);
         }
-            public static void GraphMSEByDiff(List<Bond> bonds)
+
+        public static double CouponSpreadYieldEstimate(double notional, double couponRate, PaymentFrequency frequency,
+                                                        DateTime evaluationDate, DateTime maturityDate, double price)
+        {
+            double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
+            if (T <= 0 || price <= 0) return 0;
+            double c = couponRate * notional;
+            double num = c + (notional - price) / T;
+            double den = (notional + price) / 2;
+            if (den == 0) return 0;
+            return Math.Max(0, num / den);
+        }
+
+        public static void GraphMSEByDiff(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_diff_unbinned.csv");
-            writer.WriteLine("CouponMinusYield, ErrorFirstOrder, ErrorEstimate, ErrorSecondOrder, ErrorCustom, PaymentFrequency");
-
-            foreach (var bond in bonds)
+            writer.WriteLine("CouponMinusYield,ErrorFirstOrder,ErrorEstimate,ErrorSecondOrder,ErrorCustom,ErrorCouponYield,CouponYield,PaymentFrequency");
+            foreach (var b in bonds)
             {
-                double diff = bond.CouponRate - bond.Yield;
-                double e1 = bond.ErrorFirstOrder * bond.ErrorFirstOrder;
-                double e2 = bond.ErrorEstimate * bond.ErrorEstimate;
-                double e3 = bond.ErrorSecondOrder * bond.ErrorSecondOrder;
-                double e4 = bond.ErrorCustom * bond.ErrorCustom;
-                writer.WriteLine($"{diff:F4}, {e1:F8}, {e2:F8}, {e3:F8}, {e4:F8}, {bond.Frequency}");
+                double diff = b.CouponRate - b.Yield;
+                double e1 = b.ErrorFirstOrder * b.ErrorFirstOrder;
+                double e2 = b.ErrorEstimate * b.ErrorEstimate;
+                double e3 = b.ErrorSecondOrder * b.ErrorSecondOrder;
+                double e4 = b.ErrorCustom * b.ErrorCustom;
+                double e5 = b.ErrorCouponYield * b.ErrorCouponYield;
+                writer.WriteLine($"{diff:F4},{e1:F8},{e2:F8},{e3:F8},{e4:F8},{e5:F8},{b.CouponYield:F8},{b.Frequency}");
             }
         }
 
         public static void GraphMSEByDaysToExpiry(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_days_to_expiry_unbinned.csv");
-            writer.WriteLine("DaysToExpiry, ErrorFirstOrder, ErrorEstimate, ErrorSecondOrder, ErrorCustom, PaymentFrequency");
-
-            foreach (var bond in bonds)
+            writer.WriteLine("DaysToExpiry,ErrorFirstOrder,ErrorEstimate,ErrorSecondOrder,ErrorCustom,ErrorCouponYield,CouponYield,PaymentFrequency");
+            foreach (var b in bonds)
             {
-                double daysToExpiry = (bond.MaturityDate - bond.EvaluationDate).TotalDays;
-                double e1 = bond.ErrorFirstOrder * bond.ErrorFirstOrder;
-                double e2 = bond.ErrorEstimate * bond.ErrorEstimate;
-                double e3 = bond.ErrorSecondOrder * bond.ErrorSecondOrder;
-                double e4 = bond.ErrorCustom * bond.ErrorCustom;
-                writer.WriteLine($"{daysToExpiry:F2}, {e1:F8}, {e2:F8}, {e3:F8}, {e4:F8}");
+                double days = (b.MaturityDate - b.EvaluationDate).TotalDays;
+                double e1 = b.ErrorFirstOrder * b.ErrorFirstOrder;
+                double e2 = b.ErrorEstimate * b.ErrorEstimate;
+                double e3 = b.ErrorSecondOrder * b.ErrorSecondOrder;
+                double e4 = b.ErrorCustom * b.ErrorCustom;
+                double e5 = b.ErrorCouponYield * b.ErrorCouponYield;
+                writer.WriteLine($"{days:F2},{e1:F8},{e2:F8},{e3:F8},{e4:F8},{e5:F8},{b.CouponYield:F8},{b.Frequency}");
             }
         }
-
 
         public static DateTime ToBusinessDay(this DateTime date, bool backwards = true)
         {
             int sign = backwards ? -1 : 1;
             while (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
-            {
                 date = date.AddDays(sign);
-            }
             return date;
         }
     }
@@ -294,7 +272,7 @@ namespace BondYieldEstimator
 
             double[] couponRates = Enumerable.Range(1, 10).Select(x => x / 100.0).ToArray();
             double[] yields = Enumerable.Range(1, 20).Select(x => x / 100.0).ToArray();
-            PaymentFrequency[] frequencies = new[] { PaymentFrequency.Annual, PaymentFrequency.SemiAnnual };
+            PaymentFrequency[] frequencies = { PaymentFrequency.Annual, PaymentFrequency.SemiAnnual };
 
             Console.WriteLine("Generating unique bonds...");
             var bonds = BondUtils.GenerateUniqueBonds(evaluationDate, notional, couponRates, yields, frequencies, maxYears: 30).ToList();
