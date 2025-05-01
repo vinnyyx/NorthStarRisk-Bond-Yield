@@ -188,6 +188,7 @@ namespace BondYieldEstimator
         public static double CustomYieldEstimate(double notional, double couponRate, PaymentFrequency frequency,
                                                  DateTime evaluationDate, DateTime maturityDate, double price)
         {
+            // methodology is interpolation using 10 prices
             var dates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
             var flows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
             double[] yields = { 0.01, 0.04, 0.07 };
@@ -213,11 +214,14 @@ namespace BondYieldEstimator
         public static double CouponSpreadYieldEstimate(double notional, double couponRate, PaymentFrequency frequency,
                                                         DateTime evaluationDate, DateTime maturityDate, double price)
         {
+            // calculate annual implied cash flows from coupon + price change
+            // implied fair price as denom
+            // yield should synthetically be the top divided by bottom
             double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
             if (T <= 0 || price <= 0) return 0;
             double c = couponRate * notional;
-            double num = c + (notional - price) / T;
-            double den = (notional + price) / 2;
+            double num = c + (notional - price) / T; // coupon + annualized capital gains from price appreciation
+            double den = (notional + price) / 2; // average price 
             if (den == 0) return 0;
             return Math.Max(0, num / den);
         }
