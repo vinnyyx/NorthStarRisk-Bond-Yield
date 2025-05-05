@@ -22,14 +22,18 @@ namespace BondYieldEstimator
         public double Price;
         public double YieldFirstOrder;
         public double YieldEstimate;
-        public double YieldSecondOrder;
         public double YieldCustom;
         public double CouponYield;                 // New: coupon yield estimate
+        public double Yield3;
+        public double Yield4;
+        public double Yield5;
         public double ErrorFirstOrder;
         public double ErrorEstimate;
-        public double ErrorSecondOrder;
         public double ErrorCustom;
         public double ErrorCouponYield;            // New: error for coupon yield
+        public double Error3;
+        public double Error4;
+        public double Error5;
 
         public Bond(double notional, double couponRate, double yield, PaymentFrequency freq,
                     DateTime evaluationDate, DateTime maturityDate)
@@ -48,17 +52,26 @@ namespace BondYieldEstimator
             double principal = notional;
             YieldFirstOrder = BondUtils.InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, MaturityDate, Price);
             YieldEstimate = BondUtils.InitialYieldEstimate(notional, principal, couponRate, evaluationDate, MaturityDate, Price);
-            YieldSecondOrder = BondUtils.InitialYieldEstimateSecondOrder(notional, principal, couponRate, evaluationDate, MaturityDate, Price);
+
 
             ErrorFirstOrder = YieldFirstOrder - Yield;
             ErrorEstimate = YieldEstimate - Yield;
-            ErrorSecondOrder = YieldSecondOrder - Yield;
             YieldCustom = BondUtils.CustomYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price);
             ErrorCustom = YieldCustom - Yield;
 
             // Compute coupon yield and its error
             CouponYield = BondUtils.CouponSpreadYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price);
             ErrorCouponYield = CouponYield - Yield;
+
+            Yield3 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 3 * 365);
+            Error3 = Yield3 - Yield;
+
+            Yield4 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 4 * 365);
+            Error4 = Yield4 - Yield;
+
+            Yield3 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 5 * 365);
+            Error5 = Yield5 - Yield;
+            
         }
     }
 
@@ -154,36 +167,6 @@ namespace BondYieldEstimator
             return Math.Max(0, est);
         }
 
-        public static double InitialYieldEstimateSecondOrder(double notional, double principal,
-                                                             double couponRate, DateTime evaluationDate,
-                                                             DateTime maturityDate, double price)
-        {
-            double T = (maturityDate - evaluationDate).Days / CalendarDaysPerYear;
-            double c = couponRate * notional;
-            double F = principal;
-            double P0 = T * c + F;
-
-            double A = Enumerable.Range(1, (int)Math.Round(T)).Sum(t => t * c) + T * F;
-            double B = Enumerable.Range(1, (int)Math.Round(T)).Sum(t => t * (t + 1) * c) + T * (T + 1) * F;
-
-            if (B == 0) return InitialYieldEstimateFirstOrder(notional, principal, couponRate,
-                                                             evaluationDate, maturityDate, price);
-
-            double disc = A * A - 2 * B * (P0 - price);
-            if (disc < 0 && disc > -1e-10) disc = 0;
-            if (disc < 0) return InitialYieldEstimateFirstOrder(notional, principal, couponRate,
-                                                               evaluationDate, maturityDate, price);
-
-            double sqrtDisc = Math.Sqrt(disc);
-            double r1 = (A + sqrtDisc) / B;
-            double r2 = (A - sqrtDisc) / B;
-            double y1 = InitialYieldEstimateFirstOrder(notional, principal, couponRate,
-                                                       evaluationDate, maturityDate, price);
-            double y = Math.Abs(r1 - y1) < Math.Abs(r2 - y1) ? r1 : r2;
-            return double.IsNaN(y) || double.IsInfinity(y)
-                ? y1
-                : Math.Max(0, y);
-        }
 
         public static double CustomYieldEstimate(double notional, double couponRate, PaymentFrequency frequency,
                                                  DateTime evaluationDate, DateTime maturityDate, double price)
@@ -226,35 +209,59 @@ namespace BondYieldEstimator
             return Math.Max(0, num / den);
         }
 
+        public static double AdaptiveYieldEstimate(
+            double notional,
+            double couponRate,
+            PaymentFrequency frequency,
+            DateTime evaluationDate,
+            DateTime maturityDate,
+            double price,
+            double thresholdDays)
+        {
+            // how many calendar days until maturity
+            double daysToExpiry = (maturityDate - evaluationDate).TotalDays;
+
+            if (daysToExpiry <= 0 || price <= 0)
+                return 0;
+
+            return daysToExpiry <= thresholdDays
+                ? CustomYieldEstimate(notional, couponRate, frequency, evaluationDate, maturityDate, price)
+                : CouponSpreadYieldEstimate(notional, couponRate, frequency, evaluationDate, maturityDate, price);
+        }
+
         public static void GraphMSEByDiff(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_diff_unbinned.csv");
-            writer.WriteLine("CouponMinusYield,ErrorFirstOrder,ErrorEstimate,ErrorSecondOrder,ErrorCustom,ErrorCouponYield,CouponYield,PaymentFrequency");
+            writer.WriteLine("CouponMinusYield,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,CouponYield,PaymentFrequency");
             foreach (var b in bonds)
             {
                 double diff = b.CouponRate - b.Yield;
-                double e1 = b.ErrorFirstOrder * b.ErrorFirstOrder;
-                double e2 = b.ErrorEstimate * b.ErrorEstimate;
-                double e3 = b.ErrorSecondOrder * b.ErrorSecondOrder;
-                double e4 = b.ErrorCustom * b.ErrorCustom;
-                double e5 = b.ErrorCouponYield * b.ErrorCouponYield;
-                writer.WriteLine($"{diff:F4},{e1:F8},{e2:F8},{e3:F8},{e4:F8},{e5:F8},{b.CouponYield:F8},{b.Frequency}");
+                double e1 = b.ErrorFirstOrder;
+                double e2 = b.ErrorEstimate;
+                double e4 = b.ErrorCustom;
+                double e5 = b.ErrorCouponYield;
+                double err3 = b.Error3;
+                double err4 = b.Error4;
+                double err5 = b.Error5;
+                writer.WriteLine($"{diff:F4},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{b.CouponYield:F8},{b.Frequency}");
             }
         }
 
         public static void GraphMSEByDaysToExpiry(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_days_to_expiry_unbinned.csv");
-            writer.WriteLine("DaysToExpiry,ErrorFirstOrder,ErrorEstimate,ErrorSecondOrder,ErrorCustom,ErrorCouponYield,CouponYield,PaymentFrequency");
+            writer.WriteLine("DaysToExpiry,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,CouponYield,PaymentFrequency");
             foreach (var b in bonds)
             {
                 double days = (b.MaturityDate - b.EvaluationDate).TotalDays;
-                double e1 = b.ErrorFirstOrder * b.ErrorFirstOrder;
-                double e2 = b.ErrorEstimate * b.ErrorEstimate;
-                double e3 = b.ErrorSecondOrder * b.ErrorSecondOrder;
-                double e4 = b.ErrorCustom * b.ErrorCustom;
-                double e5 = b.ErrorCouponYield * b.ErrorCouponYield;
-                writer.WriteLine($"{days:F2},{e1:F8},{e2:F8},{e3:F8},{e4:F8},{e5:F8},{b.CouponYield:F8},{b.Frequency}");
+                double e1 = b.ErrorFirstOrder;
+                double e2 = b.ErrorEstimate;
+                double e4 = b.ErrorCustom;
+                double e5 = b.ErrorCouponYield;
+                double err3 = b.Error3;
+                double err4 = b.Error4;
+                double err5 = b.Error5;
+                writer.WriteLine($"{days:F2},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{b.CouponYield:F8},{b.Frequency}");
             }
         }
 
