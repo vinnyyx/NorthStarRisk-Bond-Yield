@@ -27,6 +27,7 @@ namespace BondYieldEstimator
         public double Yield3;
         public double Yield4;
         public double Yield5;
+        public double Yield6; // New: Newton-Raphson Yield
         public double ErrorFirstOrder;
         public double ErrorEstimate;
         public double ErrorCustom;
@@ -34,6 +35,7 @@ namespace BondYieldEstimator
         public double Error3;
         public double Error4;
         public double Error5;
+        public double Error6; // New: Newton-Raphson Yield Error
 
         public Bond(double notional, double couponRate, double yield, PaymentFrequency freq,
                     DateTime evaluationDate, DateTime maturityDate)
@@ -69,8 +71,12 @@ namespace BondYieldEstimator
             Yield4 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 4 * 365);
             Error4 = Yield4 - Yield;
 
-            Yield3 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 5 * 365);
+            Yield5 = BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price, 5 * 365);
             Error5 = Yield5 - Yield;
+            
+            // Newton-Raphson method yield and its error
+            Yield6 = BondUtils.NewtonRaphsonYieldEstimate(notional, couponRate, freq, evaluationDate, MaturityDate, Price);
+            Error6 = Yield6 - Yield;
             
         }
     }
@@ -229,10 +235,42 @@ namespace BondYieldEstimator
                 : CouponSpreadYieldEstimate(notional, couponRate, frequency, evaluationDate, maturityDate, price);
         }
 
+        public static double NewtonRaphsonYieldEstimate(
+            double notional, double couponRate, PaymentFrequency frequency,
+            DateTime evaluationDate, DateTime maturityDate, double price,
+            double initialGuess = 0.05, double tolerance = 1e-8, int maxIter = 100)
+        {
+            var cashFlows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
+            var paymentDates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
+
+            double yield = initialGuess;
+            for (int i = 0; i < maxIter; i++)
+            {
+                double f = PresentValue(cashFlows, evaluationDate, paymentDates, yield) - price;
+                
+                // Numerical derivative
+                double h = 1e-5;
+                double df = (PresentValue(cashFlows, evaluationDate, paymentDates, yield + h)
+                            - PresentValue(cashFlows, evaluationDate, paymentDates, yield - h)) / (2 * h);
+
+                if (Math.Abs(df) < 1e-12)
+                    throw new InvalidOperationException("Derivative is too small. Newton-Raphson failed.");
+
+                double newYield = yield - f / df;
+
+                if (Math.Abs(newYield - yield) < tolerance)
+                    return Math.Max(0, newYield);
+
+                yield = newYield;
+            }
+
+            throw new InvalidOperationException("Newton-Raphson did not converge.");
+        }
+
         public static void GraphMSEByDiff(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_diff_unbinned.csv");
-            writer.WriteLine("CouponMinusYield,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,CouponYield,PaymentFrequency");
+            writer.WriteLine("CouponMinusYield,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,Error6,CouponYield,PaymentFrequency");
             foreach (var b in bonds)
             {
                 double diff = b.CouponRate - b.Yield;
@@ -243,14 +281,15 @@ namespace BondYieldEstimator
                 double err3 = b.Error3;
                 double err4 = b.Error4;
                 double err5 = b.Error5;
-                writer.WriteLine($"{diff:F4},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{b.CouponYield:F8},{b.Frequency}");
+                double err6 = b.Error6;
+                writer.WriteLine($"{diff:F4},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{err6:F15},{b.CouponYield:F8},{b.Frequency}");
             }
         }
 
         public static void GraphMSEByDaysToExpiry(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_days_to_expiry_unbinned.csv");
-            writer.WriteLine("DaysToExpiry,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,CouponYield,PaymentFrequency");
+            writer.WriteLine("DaysToExpiry,ErrorFirstOrder,ErrorEstimate,ErrorCustom,ErrorCouponYield,Error3,Error4,Error5,Error6,CouponYield,PaymentFrequency");
             foreach (var b in bonds)
             {
                 double days = (b.MaturityDate - b.EvaluationDate).TotalDays;
@@ -261,7 +300,8 @@ namespace BondYieldEstimator
                 double err3 = b.Error3;
                 double err4 = b.Error4;
                 double err5 = b.Error5;
-                writer.WriteLine($"{days:F2},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{b.CouponYield:F8},{b.Frequency}");
+                double err6 = b.Error6;
+                writer.WriteLine($"{days:F2},{e1:F8},{e2:F8},{e4:F8},{e5:F8},{err3:F8},{err4:F8},{err5:F8},{err6:F15},{b.CouponYield:F8},{b.Frequency}");
             }
         }
 
