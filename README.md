@@ -11,4 +11,8 @@ Approach 4: Use Coupon Spread as an estimation metric
 
 Later approaches: 
 
-Approach 3 works well with smaller time windows compared to approach 4. Thus, we will be combining the 2 in our newest apporaches.
+Approach 3 works well with smaller time windows compared to approach 4. Thus, we will be combining the 2 in our newest approaches.
+
+Approach 5: Use Coupon Spread as an estimation metric
+
+Approach 6: Newton Raphson Method
