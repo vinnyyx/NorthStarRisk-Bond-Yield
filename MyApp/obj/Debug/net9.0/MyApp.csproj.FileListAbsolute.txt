@@ -27,3 +27,18 @@ C:\Users\xuv14\Spring 2025 Projects\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net
 C:\Users\xuv14\Spring 2025 Projects\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.pdb
 C:\Users\xuv14\Spring 2025 Projects\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.genruntimeconfig.cache
 C:\Users\xuv14\Spring 2025 Projects\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\ref\MyApp.dll
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\bin\Debug\net9.0\MyApp.exe
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\bin\Debug\net9.0\MyApp.deps.json
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\bin\Debug\net9.0\MyApp.runtimeconfig.json
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\bin\Debug\net9.0\MyApp.dll
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\bin\Debug\net9.0\MyApp.pdb
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.AssemblyInfoInputs.cache
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.AssemblyInfo.cs
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.csproj.CoreCompileInputs.cache
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.sourcelink.json
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.dll
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\refint\MyApp.dll
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.pdb
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\MyApp.genruntimeconfig.cache
+C:\Users\arjd2\OneDrive\Documents\GitHub\NorthStarRisk-Bond-Yield\MyApp\obj\Debug\net9.0\ref\MyApp.dll

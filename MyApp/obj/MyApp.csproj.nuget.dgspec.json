@@ -1,31 +1,29 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\xuv14\\Spring 2025 Projects\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj": {}
+    "C:\\Users\\arjd2\\OneDrive\\Documents\\GitHub\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj": {}
   },
   "projects": {
-    "C:\\Users\\xuv14\\Spring 2025 Projects\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj": {
+    "C:\\Users\\arjd2\\OneDrive\\Documents\\GitHub\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\xuv14\\Spring 2025 Projects\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj",
+        "projectUniqueName": "C:\\Users\\arjd2\\OneDrive\\Documents\\GitHub\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj",
         "projectName": "MyApp",
-        "projectPath": "C:\\Users\\xuv14\\Spring 2025 Projects\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj",
-        "packagesPath": "C:\\Users\\xuv14\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\xuv14\\Spring 2025 Projects\\NorthStarRisk-Bond-Yield\\MyApp\\obj\\",
+        "projectPath": "C:\\Users\\arjd2\\OneDrive\\Documents\\GitHub\\NorthStarRisk-Bond-Yield\\MyApp\\MyApp.csproj",
+        "packagesPath": "C:\\Users\\arjd2\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\arjd2\\OneDrive\\Documents\\GitHub\\NorthStarRisk-Bond-Yield\\MyApp\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\xuv14\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "C:\\Users\\arjd2\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
-          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -65,7 +63,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.201/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.203/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

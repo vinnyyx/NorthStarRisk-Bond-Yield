@@ -19,6 +19,8 @@ namespace BondYieldEstimator
         public PaymentFrequency Frequency;
         public DateTime EvaluationDate;
         public DateTime MaturityDate;
+        public double[] CashFlows;    // precomputed coupon+principal
+        public double[] Times;        // year‐fractions to each payment
         public double Price;
         public double YieldFirstOrder;
         public double YieldEstimate;
@@ -62,39 +64,44 @@ namespace BondYieldEstimator
 
             var cashFlows = BondUtils.GenerateCashFlows(notional, couponRate, freq, evaluationDate, MaturityDate);
             var paymentDates = BondUtils.GeneratePaymentDates(freq, evaluationDate, MaturityDate);
-            Price = BondUtils.PresentValue(cashFlows, evaluationDate, paymentDates, yield);
+
+            CashFlows = cashFlows;
+            Times = paymentDates.Select(d => (d - evaluationDate).TotalDays / BondUtils.CalendarDaysPerYear).ToArray();
+
+            // Price = BondUtils.PresentValue(cashFlows, evaluationDate, paymentDates, yield);
+            Price = BondUtils.PresentValue(cashFlows, Times, yield);
 
             double principal = notional;
-            
+
             double localPrice = Price;
             DateTime localMaturityDate = MaturityDate;
 
-            (YieldFirstOrder, TimeFirstOrder) = MeasureTime(() => 
+            (YieldFirstOrder, TimeFirstOrder) = MeasureTime(() =>
             BondUtils.InitialYieldEstimateFirstOrder(notional, principal, couponRate, evaluationDate, localMaturityDate, localPrice));
             ErrorFirstOrder = YieldFirstOrder - Yield;
 
-            (YieldEstimate, TimeEstimate) = MeasureTime(() => 
+            (YieldEstimate, TimeEstimate) = MeasureTime(() =>
             BondUtils.InitialYieldEstimate(notional, principal, couponRate, evaluationDate, localMaturityDate, localPrice));
             ErrorEstimate = YieldEstimate - Yield;
 
-            (YieldCustom, TimeCustom) = MeasureTime(() => 
+            (YieldCustom, TimeCustom) = MeasureTime(() =>
             BondUtils.CustomYieldEstimate(notional, couponRate, freq, evaluationDate, localMaturityDate, localPrice));
             ErrorCustom = YieldCustom - Yield;
 
             // Compute coupon yield and its error
-            (CouponYield, TimeCouponYield) = MeasureTime(() => 
+            (CouponYield, TimeCouponYield) = MeasureTime(() =>
             BondUtils.CouponSpreadYieldEstimate(notional, couponRate, freq, evaluationDate, localMaturityDate, localPrice));
             ErrorCouponYield = CouponYield - Yield;
 
-            (Yield3, TimeAdaptive3) = MeasureTime(() => 
+            (Yield3, TimeAdaptive3) = MeasureTime(() =>
             BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, localMaturityDate, localPrice, 3 * 365));
             Error3 = Yield3 - Yield;
 
-            (Yield4, TimeAdaptive4) = MeasureTime(() => 
+            (Yield4, TimeAdaptive4) = MeasureTime(() =>
             BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, localMaturityDate, localPrice, 4 * 365));
             Error4 = Yield4 - Yield;
 
-            (Yield5, TimeAdaptive5) = MeasureTime(() => 
+            (Yield5, TimeAdaptive5) = MeasureTime(() =>
             BondUtils.AdaptiveYieldEstimate(notional, couponRate, freq, evaluationDate, localMaturityDate, localPrice, 5 * 365));
             Error5 = Yield5 - Yield;
         }
@@ -116,13 +123,13 @@ namespace BondYieldEstimator
                 DateTime maturity = rawDate.ToBusinessDay();
 
                 foreach (var cr in couponRates)
-                foreach (var yld in yields)
-                foreach (var freq in frequencies)
-                {
-                    var key = (cr, yld, freq, maturity);
-                    if (seen.Add(key))
-                        uniqueBonds.Add(new Bond(notional, cr, yld, freq, evaluationDate, maturity));
-                }
+                    foreach (var yld in yields)
+                        foreach (var freq in frequencies)
+                        {
+                            var key = (cr, yld, freq, maturity);
+                            if (seen.Add(key))
+                                uniqueBonds.Add(new Bond(notional, cr, yld, freq, evaluationDate, maturity));
+                        }
             }
 
             return uniqueBonds;
@@ -171,6 +178,28 @@ namespace BondYieldEstimator
             return pv;
         }
 
+        // new overload that takes (double[] cashFlows, double[] times, double y)
+        public static double PresentValue(double[] cashFlows, double[] times, double yield)
+        {
+            double pv = 0.0;
+            for (int i = 0; i < cashFlows.Length; i++)
+                pv += cashFlows[i] * Math.Pow(1.0 + yield, -times[i]);
+            return pv;
+        }
+
+
+        // Exact derivative dPV/dy 
+        public static double PresentValueDerivative(
+            double[] cashFlows,
+            double[] times,
+            double yield)
+        {
+            double deriv = 0.0;
+            for (int i = 0; i < cashFlows.Length; i++)
+                deriv += -times[i] * cashFlows[i] * Math.Pow(1.0 + yield, -times[i] - 1);
+            return deriv;
+        }
+
         public static double InitialYieldEstimateFirstOrder(double notional, double principal, double couponRate,
                                                             DateTime evaluationDate, DateTime maturityDate, double price)
         {
@@ -200,7 +229,7 @@ namespace BondYieldEstimator
             var dates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
             var flows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
             double[] yields = { 0.01, 0.04, 0.07 };
-            double[] prs   = yields
+            double[] prs = yields
                              .Select(y => PresentValue(flows, evaluationDate, dates, y))
                              .ToArray();
 
@@ -263,15 +292,21 @@ namespace BondYieldEstimator
             var cashFlows = GenerateCashFlows(notional, couponRate, frequency, evaluationDate, maturityDate);
             var paymentDates = GeneratePaymentDates(frequency, evaluationDate, maturityDate);
 
+            double[] times = paymentDates.Select(d => (d - evaluationDate).TotalDays / CalendarDaysPerYear).ToArray();
+
             double yield = initialGuess;
             int iterations;
 
             for (iterations = 0; iterations < maxIter; iterations++)
             {
-                double f = PresentValue(cashFlows, evaluationDate, paymentDates, yield) - price;
-                double h = 1e-5;
-                double df = (PresentValue(cashFlows, evaluationDate, paymentDates, yield + h) -
-                            PresentValue(cashFlows, evaluationDate, paymentDates, yield - h)) / (2 * h);
+                // double f = PresentValue(cashFlows, evaluationDate, paymentDates, yield) - price;
+                double f = PresentValue(cashFlows, times, yield) - price;
+
+                // double h = 1e-5;
+                // double df = (PresentValue(cashFlows, evaluationDate, paymentDates, yield + h) -
+                //             PresentValue(cashFlows, evaluationDate, paymentDates, yield - h)) / (2 * h);
+
+                double df = PresentValueDerivative(cashFlows, times, yield);
 
                 if (Math.Abs(df) < 1e-12)
                     throw new InvalidOperationException("Derivative too small.");
@@ -291,7 +326,7 @@ namespace BondYieldEstimator
             throw new InvalidOperationException("Newton-Raphson did not converge.");
         }
 
-        
+
         public static void GraphMSEByDiff(List<Bond> bonds)
         {
             using var writer = new StreamWriter("mse_diff_unbinned.csv");
@@ -362,10 +397,10 @@ namespace BondYieldEstimator
 
             // NR convergence analysis and total time consumption
             Console.WriteLine("Computing Newton-Raphson convergence and total timing...");
-        
+
             using var writerConverge = new StreamWriter("nr_convergence.csv");
             writerConverge.WriteLine("BondIndex,CouponRate,DaysToExpiry,Frequency,Yield,Method,InitialYield,FinalYield,Iterations,InitialTimeMs,NRTimeMs,TotalTimeMs");
-            
+
             int bondIndex = 0;
             foreach (var bond in bonds)
             {
